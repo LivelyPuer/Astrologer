@@ -1,0 +1,104 @@
+from matplotlib import pyplot as plt
+from matplotlib.lines import Line2D
+from scipy.spatial import distance
+from skimage import io
+from skimage.color import rgb2gray
+from skimage.feature import blob_log
+
+from skimage.segmentation import slic, mark_boundaries
+import numpy as np
+from sklearn.cluster import KMeans
+
+white = (255, 255, 255)
+
+
+def my_distance(a, b):
+    return distance.euclidean(a, b)
+
+
+img = io.imread(input())
+
+image_gray = rgb2gray(img)
+
+# SLIC
+segments = slic(img, start_label=0, n_segments=200, compactness=20)
+segments_ids = np.unique(segments)
+print(segments_ids)
+
+# centers
+centers = np.array([np.mean(np.nonzero(segments == i), axis=1) for i in segments_ids])
+print(centers)
+vs_right = np.vstack([segments[:, :-1].ravel(), segments[:, 1:].ravel()])
+vs_below = np.vstack([segments[:-1, :].ravel(), segments[1:, :].ravel()])
+bneighbors = np.unique(np.hstack([vs_right, vs_below]), axis=1)
+
+
+fig = plt.figure(figsize=(10, 10))
+ax = fig.add_subplot(111)
+plt.imshow(mark_boundaries(img, segments))
+plt.scatter(centers[:, 1], centers[:, 0], c='y')
+
+for i in range(bneighbors.shape[1]):
+    y0, x0 = centers[bneighbors[0, i]]
+    y1, x1 = centers[bneighbors[1, i]]
+
+    l = Line2D([x0, x1], [y0, y1], alpha=0.5)
+    ax.add_line(l)
+
+#
+def middle(a, b):
+    color = []
+    for i, j in zip(a, b):
+        color.append((i + j) // 2)
+    return color
+
+
+dict_seg = {}
+for i in range(img.shape[0]):
+    for j in range(img.shape[1]):
+        seg = segments[i, j]
+        if seg not in dict_seg.keys():
+            dict_seg[seg] = [img[i, j]]
+            continue
+        dict_seg[seg].append(img[i, j])
+for k, v in dict_seg.items():
+    p = int(0.9 * len(v))
+    v = sorted(list(v), key=lambda x: my_distance(x, white))
+    s = [0, 0, 0]
+    for c in v:
+        s[0] += c[0]
+        s[1] += c[1]
+        s[2] += c[2]
+    s[0] //= len(v[:p])
+    s[1] //= len(v[:p])
+    s[2] //= len(v[:p])
+    dict_seg[k] = s
+print(dict_seg)
+kmeans = KMeans(n_clusters=3, algorithm="elkan")
+kmeans.fit(list(dict_seg.values()))
+labels, counts = np.unique(kmeans.labels_, return_counts=True)
+dic_seg_claster = {}
+for key, value in dict_seg.items():
+    dic_seg_claster[key] = kmeans.predict([value])[0]
+max_l = max(dic_seg_claster.values(), key=lambda x: list(dic_seg_claster.values()).count(x))
+
+blobs_log = blob_log(image_gray, max_sigma=30, num_sigma=10, threshold=.05)
+fig = plt.figure()
+ax = fig.add_subplot(1, 1, 1)
+#
+ax.set_title('Laplacian of Gaussian')
+ax.imshow(img)
+count = 0
+for blob in blobs_log:
+    y, x, r = blob
+    print(max_l, end=" ")
+    print(dic_seg_claster[segments[int(y), int(x)]])
+    if dic_seg_claster[segments[int(y), int(x)]] == max_l:
+        c = plt.Circle((x, y), r, color='purple', linewidth=2, fill=False)
+        count += 1
+        ax.add_patch(c)
+print(count)
+ax.set_axis_off()
+
+plt.tight_layout()
+plt.show()
