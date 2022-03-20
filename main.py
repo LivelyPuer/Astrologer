@@ -66,30 +66,11 @@ for i in range(img.shape[0]):
     for j in range(img.shape[1]):
         seg = segments[i, j]
         if seg not in dict_seg.keys():
-            dict_seg[seg] = [img[i, j]]
+            dict_seg[seg] = 1
             continue
-        dict_seg[seg].append(img[i, j])
-for k, v in dict_seg.items():
-    p = int(0.9 * len(v))
-    v = sorted(list(v), key=lambda x: my_distance(x, white))
-    s = [0, 0, 0]
-    for c in v:
-        s[0] += c[0]
-        s[1] += c[1]
-        s[2] += c[2]
-    s[0] //= len(v[:p])
-    s[1] //= len(v[:p])
-    s[2] //= len(v[:p])
-    dict_seg[k] = s
-print(dict_seg)
-kmeans = KMeans(n_clusters=2, algorithm="elkan")
-kmeans.fit(list(dict_seg.values()))
-labels, counts = np.unique(kmeans.labels_, return_counts=True)
-dic_seg_claster = {}
-for key, value in dict_seg.items():
-    dic_seg_claster[key] = kmeans.predict([value])[0]
-max_l = max(dic_seg_claster.values(), key=lambda x: list(dic_seg_claster.values()).count(x))
-
+        dict_seg[seg] += 1
+max_l = max(dict_seg, key=dict_seg.get)
+print(max_l)
 blobs_log = blob_log(image_gray, max_sigma=30, num_sigma=10, threshold=.05)
 fig = plt.figure()
 ax = fig.add_subplot(1, 2, 1)
@@ -101,7 +82,7 @@ for blob in blobs_log:
     y, x, r = blob
     # print(max_l, end=" ")
     # print(dic_seg_claster[segments[int(y), int(x)]])
-    if dic_seg_claster[segments[int(y), int(x)]] == max_l:
+    if segments[int(y), int(x)] == max_l:
         c = plt.Circle((x, y), r, color='white', linewidth=2, fill=False)
         count += 1
         ax.add_patch(c)
